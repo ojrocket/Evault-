@@ -95,5 +95,6 @@ Evault/
 
 <div align="center">
     <b>Star ⭐ this repo if you find it useful!</b><br>
-    Made with ❤️ by Evault Team
+    Made with ❤️ by Team Telugu abbAI
+    
 </div>
