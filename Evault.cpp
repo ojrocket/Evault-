@@ -18,6 +18,10 @@
 #define _WIN32_WINNT 0x0600
 #define _WIN32_IE 0x0900
 
+#pragma comment(                                                               \
+    linker,                                                                    \
+    "/manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
+
 #include "sqlite3.h"
 #include <algorithm>
 #include <cstdlib>
@@ -29,7 +33,6 @@
 #include <string>
 #include <vector>
 #include <windows.h>
-
 
 using namespace std;
 
@@ -55,29 +58,46 @@ HFONT hFont;
 #define ID_EDIT_AMOUNT 204
 #define ID_EDIT_TARGET 205
 
-#define ID_LIST_HISTORY 303
+#define ID_BTN_ENTER 111
+#define ID_LIST_HISTORY 206
+#define ID_BTN_PROFILE_CARD 300
+#define ID_CARD_BALANCE 4000 // Base for profile cards
+
+// Selection Tracking
+string selectedProfileAccNum = "";
+
+// Global Gray/Dark Colors
+COLORREF colBlue = RGB(138, 180, 248);    // Soft Blue for dark mode
+COLORREF colBg = RGB(32, 33, 36);         // Dark Gray Bg (Chrome Style)
+COLORREF colCard = RGB(41, 42, 45);       // Slightly lighter card
+COLORREF colWhite = RGB(232, 234, 237);   // Light Gray text
+COLORREF colText = RGB(232, 234, 237);    // Dark Text
+COLORREF colTextDim = RGB(154, 160, 166); // Dimmer text
+
+HBRUSH hBrushBg;
+HBRUSH hBrushCard;
+HBRUSH hBrushBlue;
+
+HFONT hFontTitle, hFontSmall, hFontBig;
 
 // Helper for strings
-wstring toWString(const string &str) {
-  if (str.empty())
-    return wstring();
-  int size_needed =
-      MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), NULL, 0);
-  wstring wstrTo(size_needed, 0);
-  MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), &wstrTo[0],
-                      size_needed);
-  return wstrTo;
+wstring toWString(const string &s) {
+  if (s.empty())
+    return L"";
+  int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), (int)s.size(), NULL, 0);
+  wstring w(n, 0);
+  MultiByteToWideChar(CP_UTF8, 0, s.c_str(), (int)s.size(), &w[0], n);
+  return w;
 }
-
-string toString(const wstring &wstr) {
-  if (wstr.empty())
-    return string();
-  int size_needed = WideCharToMultiByte(CP_UTF8, 0, &wstr[0], (int)wstr.size(),
-                                        NULL, 0, NULL, NULL);
-  string strTo(size_needed, 0);
-  WideCharToMultiByte(CP_UTF8, 0, &wstr[0], (int)wstr.size(), &strTo[0],
-                      size_needed, NULL, NULL);
-  return strTo;
+string toString(const wstring &w) {
+  if (w.empty())
+    return "";
+  int n = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), (int)w.size(), NULL, 0,
+                              NULL, NULL);
+  string s(n, 0);
+  WideCharToMultiByte(CP_UTF8, 0, w.c_str(), (int)w.size(), &s[0], n, NULL,
+                      NULL);
+  return s;
 }
 
 namespace EvaultApp {
@@ -219,18 +239,17 @@ public:
   bool saveAccount(const Account &acc) {
     if (!db)
       return false;
-    sqlite3_stmt *stmt;
+    sqlite3_stmt *s;
     sqlite3_prepare_v2(
-        db, "INSERT INTO accounts VALUES(?,?,?,?, CURRENT_TIMESTAMP);", -1,
-        &stmt, 0);
-    sqlite3_bind_text(stmt, 1, acc.getAccountNumber().c_str(), -1,
+        db, "INSERT INTO accounts VALUES(?,?,?,?, CURRENT_TIMESTAMP);", -1, &s,
+        0);
+    sqlite3_bind_text(s, 1, acc.getAccountNumber().c_str(), -1,
                       SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 2, acc.getHolderName().c_str(), -1,
-                      SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 3, acc.getPin().c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_double(stmt, 4, acc.getBalance());
-    bool ok = (sqlite3_step(stmt) == SQLITE_DONE);
-    sqlite3_finalize(stmt);
+    sqlite3_bind_text(s, 2, acc.getHolderName().c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(s, 3, acc.getPin().c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_double(s, 4, acc.getBalance());
+    bool ok = (sqlite3_step(s) == SQLITE_DONE);
+    sqlite3_finalize(s);
     if (ok)
       accountsCache[acc.getAccountNumber()] = acc;
     return ok;
@@ -239,15 +258,14 @@ public:
   bool updateAccount(const Account &acc) {
     if (!db)
       return false;
-    sqlite3_stmt *stmt;
-    sqlite3_prepare_v2(db,
-                       "UPDATE accounts SET balance=? WHERE account_number=?;",
-                       -1, &stmt, 0);
-    sqlite3_bind_double(stmt, 1, acc.getBalance());
-    sqlite3_bind_text(stmt, 2, acc.getAccountNumber().c_str(), -1,
+    sqlite3_stmt *s;
+    sqlite3_prepare_v2(
+        db, "UPDATE accounts SET balance=? WHERE account_number=?;", -1, &s, 0);
+    sqlite3_bind_double(s, 1, acc.getBalance());
+    sqlite3_bind_text(s, 2, acc.getAccountNumber().c_str(), -1,
                       SQLITE_TRANSIENT);
-    bool ok = (sqlite3_step(stmt) == SQLITE_DONE);
-    sqlite3_finalize(stmt);
+    bool ok = (sqlite3_step(s) == SQLITE_DONE);
+    sqlite3_finalize(s);
     if (ok)
       accountsCache[acc.getAccountNumber()] = acc;
     return ok;
@@ -273,20 +291,25 @@ public:
     sqlite3_finalize(stmt);
   }
 
+  map<string, Account> getAllAccounts() {
+    reloadAccounts(); // Ensure cache is up-to-date
+    return accountsCache;
+  }
+
   bool saveTransaction(const Transaction &t) {
     if (!db)
       return false;
-    sqlite3_stmt *stmt;
+    sqlite3_stmt *s;
     sqlite3_prepare_v2(db,
                        "INSERT INTO transactions (account_number, type, "
                        "amount, target_account) VALUES (?,?,?,?);",
-                       -1, &stmt, 0);
-    sqlite3_bind_text(stmt, 1, t.accountNumber.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 2, t.getTypeString().c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_double(stmt, 3, t.amount);
-    sqlite3_bind_text(stmt, 4, t.targetAccount.c_str(), -1, SQLITE_TRANSIENT);
-    bool ok = (sqlite3_step(stmt) == SQLITE_DONE);
-    sqlite3_finalize(stmt);
+                       -1, &s, 0);
+    sqlite3_bind_text(s, 1, t.accountNumber.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(s, 2, t.getTypeString().c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_double(s, 3, t.amount);
+    sqlite3_bind_text(s, 4, t.targetAccount.c_str(), -1, SQLITE_TRANSIENT);
+    bool ok = (sqlite3_step(s) == SQLITE_DONE);
+    sqlite3_finalize(s);
     if (ok)
       nextTransactionId++;
     return ok;
@@ -330,18 +353,28 @@ public:
   }
 
   int getNextTId() { return nextTransactionId; }
+
+  // Transaction Support
+  bool beginTransaction() {
+    return sqlite3_exec(db, "BEGIN TRANSACTION;", 0, 0, 0) == SQLITE_OK;
+  }
+
+  bool commitTransaction() {
+    return sqlite3_exec(db, "COMMIT;", 0, 0, 0) == SQLITE_OK;
+  }
+
+  bool rollbackTransaction() {
+    return sqlite3_exec(db, "ROLLBACK;", 0, 0, 0) == SQLITE_OK;
+  }
 };
 
 Database db;
 Account *currentUser = nullptr;
 
 bool Login(string u, string p) {
-  db.reloadAccounts();
   Account *acc = db.findAccount(u);
-  if (acc && acc->verifyPin(p)) {
-    currentUser = acc;
-    return true;
-  }
+  if (acc && acc->verifyPin(p))
+    return currentUser = acc, true;
   return false;
 }
 } // namespace EvaultApp
@@ -350,156 +383,199 @@ bool Login(string u, string p) {
 //               UI Logic
 // ==========================================
 
-// Views
-enum ViewState { VIEW_HOME, VIEW_LOGIN, VIEW_REGISTER, VIEW_DASHBOARD };
+// View States
+enum ViewState {
+  VIEW_HOME,
+  VIEW_LOGIN,
+  VIEW_REGISTER,
+  VIEW_DASHBOARD,
+  VIEW_PROFILES,
+  VIEW_PIN_ENTRY
+};
 ViewState currentView = VIEW_HOME;
 
-// Helper to Create Controls
-HWND CreateLabel(LPCWSTR text, int x, int y, int w, int h, HWND parent) {
-  HWND hCtrl = CreateWindow(L"STATIC", text, WS_CHILD | WS_VISIBLE | SS_LEFT, x,
-                            y, w, h, parent, NULL, hInst, NULL);
-  SendMessage(hCtrl, WM_SETFONT, (WPARAM)hFont, TRUE);
-  return hCtrl;
+// Unified Control Creator
+HWND InitCtrl(LPCWSTR cls, LPCWSTR txt, int x, int y, int w, int h, HWND p,
+              int id = 0, DWORD extra = 0) {
+  DWORD st = WS_CHILD | WS_VISIBLE | extra;
+  HWND ctrl =
+      CreateWindow(cls, txt, st, x, y, w, h, p, (HMENU)(UINT_PTR)id, hInst, 0);
+  SendMessage(ctrl, WM_SETFONT, (WPARAM)hFont, 1);
+  return ctrl;
 }
+#define AddLabel(t, x, y, w, h, p)                                             \
+  InitCtrl(L"STATIC", t, x, y, w, h, p, 0, SS_LEFT)
+#define AddBtn(t, x, y, w, h, p, id)                                           \
+  InitCtrl(L"BUTTON", t, x, y, w, h, p, id, BS_PUSHBUTTON | BS_FLAT)
+#define AddEdit(x, y, w, h, p, id, pwd)                                        \
+  InitCtrl(L"EDIT", L"", x, y, w, h, p, id,                                    \
+           WS_BORDER | ES_AUTOHSCROLL | (pwd ? ES_PASSWORD : 0))
 
-HWND CreateButton(LPCWSTR text, int x, int y, int w, int h, HWND parent,
-                  int id) {
-  HWND hCtrl = CreateWindow(
-      L"BUTTON", text, WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | BS_FLAT, x, y, w,
-      h, parent, (HMENU) static_cast<UINT_PTR>(id), hInst, NULL);
-  SendMessage(hCtrl, WM_SETFONT, (WPARAM)hFont, TRUE);
-  return hCtrl;
-}
+void LabelCenter(HWND hLabel) {
+  RECT rcParent, rcLabel;
+  GetClientRect(GetParent(hLabel), &rcParent);
+  GetWindowRect(hLabel, &rcLabel);
+  MapWindowPoints(HWND_DESKTOP, GetParent(hLabel), (LPPOINT)&rcLabel, 2);
 
-HWND CreateEdit(int x, int y, int w, int h, HWND parent, int id,
-                bool password = false) {
-  DWORD style = WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL;
-  if (password)
-    style |= ES_PASSWORD;
-  HWND hCtrl = CreateWindow(L"EDIT", L"", style, x, y, w, h, parent,
-                            (HMENU) static_cast<UINT_PTR>(id), hInst, NULL);
-  SendMessage(hCtrl, WM_SETFONT, (WPARAM)hFont, TRUE);
-  return hCtrl;
+  int labelWidth = rcLabel.right - rcLabel.left;
+  int newX = (rcParent.right - labelWidth) / 2;
+  SetWindowPos(hLabel, NULL, newX, rcLabel.top, 0, 0,
+               SWP_NOSIZE | SWP_NOZORDER);
 }
 
 // Clear all child windows (reset view)
-void ClearView(HWND hwnd) {
-  HWND hChild = GetWindow(hwnd, GW_CHILD);
-  while (hChild) {
-    HWND hNext = GetWindow(hChild, GW_HWNDNEXT);
-    DestroyWindow(hChild);
-    hChild = hNext;
-  }
+BOOL CALLBACK ClearChildProc(HWND child, LPARAM) {
+  DestroyWindow(child);
+  return TRUE;
 }
 
+void ClearView(HWND hwnd) { EnumChildWindows(hwnd, ClearChildProc, 0); }
+
 void ShowHome(HWND hwnd);
-void ShowLogin(HWND hwnd);
 void ShowRegister(HWND hwnd);
 void ShowDashboard(HWND hwnd);
+void ShowProfileSelection(HWND hwnd);
+void ShowPinEntry(HWND hwnd);
 
 void ShowHome(HWND hwnd) {
   ClearView(hwnd);
   currentView = VIEW_HOME;
-  CreateLabel(L"Welcome to Evault Banking Portal", 250, 50, 300, 30, hwnd);
-  CreateButton(L"Login", 300, 150, 200, 40, hwnd, ID_BTN_LOGIN);
-  CreateButton(L"Create New Account", 300, 210, 200, 40, hwnd, ID_BTN_REGISTER);
+
+  HWND hTitle = AddLabel(L"Evault", 300, 150, 200, 60, hwnd);
+  SendMessage(hTitle, WM_SETFONT, (WPARAM)hFontBig, TRUE);
+  LabelCenter(hTitle);
+
+  HWND hSub = AddLabel(L"Secure. Simple. Banking.", 300, 210, 200, 25, hwnd);
+  SendMessage(hSub, WM_SETFONT, (WPARAM)hFontSmall, TRUE);
+  LabelCenter(hSub);
+
+  AddBtn(L"Enter Vault", 300, 300, 200, 45, hwnd, ID_BTN_ENTER);
+  AddBtn(L"Create Account", 300, 355, 200, 30, hwnd, ID_BTN_REGISTER);
 }
 
-void ShowLogin(HWND hwnd) {
+void ShowProfileSelection(HWND hwnd) {
   ClearView(hwnd);
-  currentView = VIEW_LOGIN;
-  CreateLabel(L"Login to Evault", 350, 50, 200, 30, hwnd);
-  CreateLabel(L"Account Number:", 250, 120, 150, 20, hwnd);
-  CreateEdit(400, 115, 200, 25, hwnd, ID_EDIT_USER);
-  CreateLabel(L"PIN Code:", 250, 160, 150, 20, hwnd);
-  CreateEdit(400, 155, 200, 25, hwnd, ID_EDIT_PIN, true);
-  CreateButton(L"Login Securely", 300, 220, 200, 40, hwnd, ID_BTN_SUBMIT_LOGIN);
-  CreateButton(L"Back", 30, 500, 100, 30, hwnd, ID_BTN_BACK);
+  currentView = VIEW_PROFILES;
+  EvaultApp::db.reloadAccounts();
+  auto accounts = EvaultApp::db.getAllAccounts();
+
+  HWND hTitle = AddLabel(L"Who's using Evault?", 200, 100, 400, 40, hwnd);
+  SendMessage(hTitle, WM_SETFONT, (WPARAM)hFontTitle, TRUE);
+  LabelCenter(hTitle);
+
+  int x = 100, y = 200;
+  int i = 0;
+  for (auto const &pair : accounts) {
+    const string &accNum = pair.first;
+    const EvaultApp::Account &acc = pair.second;
+    HWND hCard = CreateWindow(
+        L"BUTTON", L"", WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, x, y, 140, 180,
+        hwnd, (HMENU)(ID_BTN_PROFILE_CARD + i), hInst, (LPVOID)accNum.c_str());
+    SetWindowLongPtr(hCard, GWLP_USERDATA, (LONG_PTR) new string(accNum));
+    x += 160;
+    if (x > 600) {
+      x = 100;
+      y += 200;
+    }
+    i++;
+  }
+
+  LabelCenter(
+      AddBtn(L"+ Add Account", 350, 500, 120, 35, hwnd, ID_BTN_REGISTER));
+}
+
+void ShowPinEntry(HWND hwnd) {
+  ClearView(hwnd);
+  currentView = VIEW_PIN_ENTRY;
+  auto acc = EvaultApp::db.findAccount(selectedProfileAccNum);
+  if (!acc) {
+    ShowProfileSelection(hwnd);
+    return;
+  }
+
+  LabelCenter(
+      InitCtrl(L"STATIC", L"", 350, 100, 100, 100, hwnd, 0, SS_OWNERDRAW));
+  HWND hName = AddLabel(toWString(acc->getHolderName()).c_str(), 200, 210, 400,
+                        30, hwnd);
+  SendMessage(hName, WM_SETFONT, (WPARAM)hFontTitle, TRUE);
+  LabelCenter(hName);
+
+  LabelCenter(AddLabel(L"Enter your 4-digit PIN", 300, 260, 200, 20, hwnd));
+  HWND hPin = AddEdit(325, 290, 150, 35, hwnd, ID_EDIT_PIN, true);
+  SendMessage(hPin, WM_SETFONT, (WPARAM)hFontTitle, TRUE);
+  LabelCenter(hPin);
+
+  LabelCenter(AddBtn(L"Login", 350, 350, 100, 40, hwnd, ID_BTN_SUBMIT_LOGIN));
+  LabelCenter(AddBtn(L"Back", 360, 400, 80, 25, hwnd, ID_BTN_BACK));
 }
 
 void ShowRegister(HWND hwnd) {
   ClearView(hwnd);
   currentView = VIEW_REGISTER;
-  CreateLabel(L"Create New Account", 330, 50, 200, 30, hwnd);
-  CreateLabel(L"Full Name:", 250, 120, 150, 20, hwnd);
-  CreateEdit(400, 115, 200, 25, hwnd, ID_EDIT_NAME);
-  CreateLabel(L"Set PIN (4-Digits):", 250, 160, 150, 20, hwnd);
-  CreateEdit(400, 155, 200, 25, hwnd, ID_EDIT_PIN, true);
-  CreateLabel(L"Initial Deposit ($):", 250, 200, 150, 20, hwnd);
-  CreateEdit(400, 195, 200, 25, hwnd, ID_EDIT_AMOUNT);
-  CreateButton(L"Register Account", 300, 260, 200, 40, hwnd,
-               ID_BTN_SUBMIT_REGISTER);
-  CreateButton(L"Back", 30, 500, 100, 30, hwnd, ID_BTN_BACK);
+  LabelCenter(AddLabel(L"Join Evault", 300, 50, 200, 40, hwnd));
+  LabelCenter(AddLabel(L"Full Name", 300, 120, 200, 20, hwnd));
+  LabelCenter(AddEdit(300, 145, 200, 30, hwnd, ID_EDIT_NAME, false));
+  LabelCenter(AddLabel(L"Set 4-Digit PIN", 300, 195, 200, 20, hwnd));
+  LabelCenter(AddEdit(300, 220, 200, 30, hwnd, ID_EDIT_PIN, true));
+  LabelCenter(AddLabel(L"Initial Deposit ($)", 300, 270, 200, 20, hwnd));
+  LabelCenter(AddEdit(300, 295, 200, 30, hwnd, ID_EDIT_AMOUNT, false));
+  LabelCenter(AddBtn(L"Create Account", 300, 360, 200, 40, hwnd,
+                     ID_BTN_SUBMIT_REGISTER));
+  LabelCenter(AddBtn(L"Cancel", 350, 410, 100, 30, hwnd, ID_BTN_BACK));
 }
 
 void ShowDashboard(HWND hwnd) {
   ClearView(hwnd);
   currentView = VIEW_DASHBOARD;
   using namespace EvaultApp;
-
   if (!currentUser) {
     ShowHome(hwnd);
     return;
   }
 
-  wstring welcome = L"Welcome, " + toWString(currentUser->getHolderName());
-  wstring accNum = L"Account #" + toWString(currentUser->getAccountNumber());
+  HWND hWelcome =
+      AddLabel((L"Hi, " + toWString(currentUser->getHolderName())).c_str(), 50,
+               30, 400, 40, hwnd);
+  SendMessage(hWelcome, WM_SETFONT, (WPARAM)hFontTitle, TRUE);
+  AddLabel((L"Account #" + toWString(currentUser->getAccountNumber())).c_str(),
+           50, 75, 400, 20, hwnd);
 
-  CreateLabel(welcome.c_str(), 50, 30, 400, 30, hwnd);
-  CreateLabel(accNum.c_str(), 50, 60, 400, 30, hwnd);
+  InitCtrl(L"STATIC", L"", 50, 110, 700, 100, hwnd, ID_CARD_BALANCE,
+           SS_OWNERDRAW);
 
-  wstringstream ss;
-  ss << L"Current Balance: $" << fixed << setprecision(2)
-     << currentUser->getBalance();
-  CreateLabel(ss.str().c_str(), 50, 100, 400, 30, hwnd);
+  AddLabel(L"Quick Actions", 50, 230, 200, 20, hwnd);
+  AddBtn(L"Deposit", 50, 260, 120, 40, hwnd, ID_BTN_DEPOSIT);
+  AddBtn(L"Withdraw", 185, 260, 120, 40, hwnd, ID_BTN_WITHDRAW);
+  AddBtn(L"Transfer", 320, 260, 120, 40, hwnd, ID_BTN_TRANSFER);
 
-  // Transaction Section
-  CreateLabel(L"Transaction Controls:", 50, 150, 200, 20, hwnd);
+  AddLabel(L"Amount ($)", 50, 320, 100, 20, hwnd);
+  AddEdit(50, 345, 120, 30, hwnd, ID_EDIT_AMOUNT, false);
+  AddLabel(L"Target Account", 185, 320, 120, 20, hwnd);
+  AddEdit(185, 345, 255, 30, hwnd, ID_EDIT_TARGET, false);
+  AddBtn(L"Logout", 650, 30, 100, 30, hwnd, ID_BTN_LOGOUT);
 
-  CreateLabel(L"Amount ($):", 50, 180, 100, 20, hwnd);
-  CreateEdit(150, 175, 100, 25, hwnd, ID_EDIT_AMOUNT);
-
-  CreateLabel(L"Target Account (To):", 270, 180, 220, 20, hwnd);
-  CreateEdit(500, 175, 150, 25, hwnd, ID_EDIT_TARGET);
-
-  CreateButton(L"Deposit", 50, 220, 100, 30, hwnd, ID_BTN_DEPOSIT);
-  CreateButton(L"Withdraw", 170, 220, 100, 30, hwnd, ID_BTN_WITHDRAW);
-  CreateButton(L"Transfer", 290, 220, 100, 30, hwnd, ID_BTN_TRANSFER);
-
-  CreateButton(L"Logout", 650, 30, 100, 30, hwnd, ID_BTN_LOGOUT);
-
-  // History
-  CreateLabel(L"Recent Transactions:", 50, 270, 200, 20, hwnd);
-  HWND hList = CreateWindow(
-      L"LISTBOX", NULL,
-      WS_CHILD | WS_VISIBLE | WS_BORDER | WS_VSCROLL | LBS_NOTIFY, 50, 300, 700,
-      220, hwnd, (HMENU)ID_LIST_HISTORY, hInst, NULL);
-  SendMessage(hList, WM_SETFONT, (WPARAM)hFont, TRUE);
+  AddLabel(L"Recent Activity", 50, 400, 200, 20, hwnd);
+  HWND hList =
+      InitCtrl(L"LISTBOX", 0, 50, 430, 700, 120, hwnd, ID_LIST_HISTORY,
+               WS_VSCROLL | LBS_NOTIFY | LBS_OWNERDRAWFIXED | WS_BORDER);
 
   auto hist = db.getHistory(currentUser->getAccountNumber());
   for (const auto &t : hist) {
     wstringstream line;
     line << L"[" << t.transactionId << L"] " << toWString(t.getTypeString())
          << L" $" << fixed << setprecision(2) << t.amount;
-
     if (!t.targetAccount.empty()) {
-      if (t.type == TransactionType::TRANSFER_IN) {
+      if (t.type == TransactionType::TRANSFER_IN)
         line << L" (From: "
-             << (t.targetName.empty() || t.targetName == "Unknown"
-                     ? toWString(t.targetAccount)
-                     : toWString(t.targetName))
+             << (t.targetName == "Unknown" ? toWString(t.targetAccount)
+                                           : toWString(t.targetName))
              << L")";
-      } else if (t.type == TransactionType::TRANSFER_OUT) {
+      else if (t.type == TransactionType::TRANSFER_OUT)
         line << L" (To: "
-             << (t.targetName.empty() || t.targetName == "Unknown"
-                     ? toWString(t.targetAccount)
-                     : toWString(t.targetName))
+             << (t.targetName == "Unknown" ? toWString(t.targetAccount)
+                                           : toWString(t.targetName))
              << L")";
-      } else {
-        line << L" -> " << toWString(t.targetName);
-      }
     }
-
     SendMessage(hList, LB_ADDSTRING, 0, (LPARAM)line.str().c_str());
   }
 }
@@ -511,36 +587,234 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     hFont = CreateFont(18, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                        DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+    hFontTitle =
+        CreateFont(28, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+                   OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
+                   DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+    hFontBig =
+        CreateFont(64, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+                   OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
+                   DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+    hFontSmall =
+        CreateFont(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+                   OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
+                   DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+
+    hBrushBg = CreateSolidBrush(colBg);
+    hBrushCard = CreateSolidBrush(colCard);
+    hBrushBlue = CreateSolidBrush(colBlue);
+
     ShowHome(hwnd);
     break;
+
+  case WM_CTLCOLORSTATIC: {
+    HDC hdc = (HDC)wParam;
+    HWND ctrl = (HWND)lParam;
+    SetTextColor(hdc, colWhite);
+    SetBkMode(hdc, TRANSPARENT);
+    // If it's a dashboard label, it might need hBrushBg unless inside a card
+    return (INT_PTR)hBrushBg;
+  }
+  case WM_CTLCOLORDLG:
+    return (INT_PTR)hBrushBg;
+  case WM_CTLCOLOREDIT: {
+    HDC hdc = (HDC)wParam;
+    SetTextColor(hdc, colWhite);
+    SetBkColor(hdc, colCard);
+    return (INT_PTR)hBrushCard;
+  }
+
+  case WM_DRAWITEM: {
+    LPDRAWITEMSTRUCT pds = (LPDRAWITEMSTRUCT)lParam;
+
+    // Profile Cards (Who's using Chrome style)
+    if (pds->CtlID >= ID_BTN_PROFILE_CARD && pds->CtlType == ODT_BUTTON) {
+      string *pAccNum =
+          (string *)GetWindowLongPtr(pds->hwndItem, GWLP_USERDATA);
+      if (!pAccNum)
+        return TRUE; // Should not happen
+      auto acc = EvaultApp::db.findAccount(*pAccNum);
+      if (!acc)
+        return TRUE; // Should not happen
+
+      // Background Hover
+      FillRect(pds->hDC, &pds->rcItem, hBrushBg);
+      if (pds->itemState & ODS_SELECTED) {
+        // Darker feedback
+        HBRUSH hHoverBrush = CreateSolidBrush(RGB(50, 50, 50));
+        FillRect(pds->hDC, &pds->rcItem, hHoverBrush);
+        DeleteObject(hHoverBrush);
+      }
+
+      // Circular Avatar
+      HBRUSH hCircleBrush = CreateSolidBrush(RGB(200, 30, 90)); // Vibrant pink
+      HGDIOBJ oldBrush = SelectObject(pds->hDC, hCircleBrush);
+      SelectObject(pds->hDC, GetStockObject(NULL_PEN));
+      Ellipse(pds->hDC, pds->rcItem.left + 30, pds->rcItem.top + 20,
+              pds->rcItem.left + 110, pds->rcItem.top + 100);
+
+      // Initials
+      SetTextColor(pds->hDC, RGB(255, 255, 255));
+      SetBkMode(pds->hDC, TRANSPARENT);
+      wstring initial = L"";
+      if (!acc->getHolderName().empty()) {
+        initial = toWString(acc->getHolderName()).substr(0, 1);
+      }
+      RECT rcInit = {pds->rcItem.left + 30, pds->rcItem.top + 20,
+                     pds->rcItem.left + 110, pds->rcItem.top + 100};
+      DrawText(pds->hDC, initial.c_str(), -1, &rcInit,
+               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+      // Name
+      SetTextColor(pds->hDC, colWhite);
+      RECT rcName = pds->rcItem;
+      rcName.top += 110;
+      DrawText(pds->hDC, toWString(acc->getHolderName()).c_str(), -1, &rcName,
+               DT_CENTER | DT_SINGLELINE);
+
+      // Account Number
+      SetTextColor(pds->hDC, colTextDim);
+      HGDIOBJ oldFont = SelectObject(pds->hDC, hFontSmall);
+      RECT rcAcc = rcName;
+      rcAcc.top += 25;
+      DrawText(pds->hDC, (L"#" + toWString(acc->getAccountNumber())).c_str(),
+               -1, &rcAcc, DT_CENTER | DT_SINGLELINE);
+      SelectObject(pds->hDC, oldFont);
+
+      SelectObject(pds->hDC, oldBrush);
+      DeleteObject(hCircleBrush);
+      return TRUE;
+    }
+    // Avatar for Pin Entry
+    if (pds->CtlType == ODT_STATIC && pds->CtlID == 0 &&
+        currentView == VIEW_PIN_ENTRY) {
+      auto acc = EvaultApp::db.findAccount(selectedProfileAccNum);
+      if (!acc)
+        return TRUE;
+
+      HBRUSH hCircleBrush = CreateSolidBrush(RGB(200, 30, 90)); // Vibrant pink
+      HGDIOBJ oldBrush = SelectObject(pds->hDC, hCircleBrush);
+      SelectObject(pds->hDC, GetStockObject(NULL_PEN));
+      Ellipse(pds->hDC, pds->rcItem.left, pds->rcItem.top, pds->rcItem.right,
+              pds->rcItem.bottom);
+
+      SetTextColor(pds->hDC, RGB(255, 255, 255));
+      SetBkMode(pds->hDC, TRANSPARENT);
+      wstring initial = L"";
+      if (!acc->getHolderName().empty()) {
+        initial = toWString(acc->getHolderName()).substr(0, 1);
+      }
+      DrawText(pds->hDC, initial.c_str(), -1, &pds->rcItem,
+               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+      SelectObject(pds->hDC, oldBrush);
+      DeleteObject(hCircleBrush);
+      return TRUE;
+    }
+
+    if (pds->CtlType == ODT_STATIC) {
+      // Drawing the Balance Card
+      FillRect(pds->hDC, &pds->rcItem, hBrushCard);
+      HPEN hPen = CreatePen(PS_SOLID, 1, RGB(218, 220, 224));
+      HGDIOBJ oldPen = SelectObject(pds->hDC, hPen);
+      HGDIOBJ oldBrush = SelectObject(pds->hDC, GetStockObject(NULL_BRUSH));
+      RoundRect(pds->hDC, pds->rcItem.left, pds->rcItem.top, pds->rcItem.right,
+                pds->rcItem.bottom, 15, 15);
+
+      if (pds->CtlID == ID_CARD_BALANCE && EvaultApp::currentUser) {
+        SetTextColor(pds->hDC, colWhite);
+        SetBkMode(pds->hDC, TRANSPARENT);
+        SelectObject(pds->hDC, hFontSmall);
+        RECT rcLabel = pds->rcItem;
+        rcLabel.left += 20;
+        rcLabel.top += 10;
+        DrawText(pds->hDC, L"Total Balance", -1, &rcLabel, DT_SINGLELINE);
+
+        SelectObject(pds->hDC, hFontTitle);
+        wstringstream ss;
+        ss << L"$" << fixed << setprecision(2)
+           << EvaultApp::currentUser->getBalance();
+        RECT rcBal = pds->rcItem;
+        rcBal.left += 20;
+        rcBal.top += 35;
+        DrawText(pds->hDC, ss.str().c_str(), -1, &rcBal, DT_SINGLELINE);
+      }
+
+      SelectObject(pds->hDC, oldPen);
+      SelectObject(pds->hDC, oldBrush);
+      DeleteObject(hPen);
+      return TRUE;
+    }
+    if (pds->CtlID == ID_LIST_HISTORY && pds->CtlType == ODT_LISTBOX) {
+      if (pds->itemID == -1)
+        return TRUE;
+
+      COLORREF txtCol = colText;
+      HBRUSH bgFill = hBrushCard;
+
+      if (pds->itemState & ODS_SELECTED) {
+        bgFill = CreateSolidBrush(RGB(232, 240, 254));
+        txtCol = colBlue;
+      }
+
+      FillRect(pds->hDC, &pds->rcItem, bgFill);
+      if (pds->itemState & ODS_SELECTED)
+        DeleteObject(bgFill);
+
+      wchar_t text[256];
+      SendMessage(pds->hwndItem, LB_GETTEXT, pds->itemID, (LPARAM)text);
+
+      SetTextColor(pds->hDC, txtCol);
+      SetBkMode(pds->hDC, TRANSPARENT);
+
+      RECT textRect = pds->rcItem;
+      textRect.left += 15;
+      DrawText(pds->hDC, text, -1, &textRect, DT_SINGLELINE | DT_VCENTER);
+      return TRUE;
+    }
+  } break;
 
   case WM_COMMAND: {
     int id = LOWORD(wParam);
 
     // Navigation
-    if (id == ID_BTN_LOGIN)
-      ShowLogin(hwnd);
+    if (id == ID_BTN_ENTER)
+      ShowProfileSelection(hwnd);
+    if (id >= ID_BTN_PROFILE_CARD && id < ID_BTN_PROFILE_CARD + 100) {
+      string *pAccNum =
+          (string *)GetWindowLongPtr(GetDlgItem(hwnd, id), GWLP_USERDATA);
+      if (pAccNum) {
+        selectedProfileAccNum = *pAccNum;
+        ShowPinEntry(hwnd);
+      }
+    }
     if (id == ID_BTN_REGISTER)
       ShowRegister(hwnd);
-    if (id == ID_BTN_BACK)
-      ShowHome(hwnd);
+    if (id == ID_BTN_BACK) {
+      if (currentView == VIEW_PROFILES || currentView == VIEW_REGISTER) {
+        ShowHome(hwnd);
+      } else if (currentView == VIEW_PIN_ENTRY) {
+        ShowProfileSelection(hwnd);
+      } else {
+        ShowHome(hwnd); // Default fallback
+      }
+    }
     if (id == ID_BTN_LOGOUT) {
       EvaultApp::currentUser = nullptr;
-      ShowHome(hwnd);
+      ShowProfileSelection(hwnd);
       MessageBox(hwnd, L"Logged out successfully.", L"Evault",
                  MB_OK | MB_ICONINFORMATION);
     }
 
     // Login Logic
     if (id == ID_BTN_SUBMIT_LOGIN) {
-      wchar_t u[50], p[50];
-      GetWindowText(GetDlgItem(hwnd, ID_EDIT_USER), u, 50);
+      wchar_t p[50];
       GetWindowText(GetDlgItem(hwnd, ID_EDIT_PIN), p, 50);
 
-      if (EvaultApp::Login(toString(u), toString(p))) {
+      if (EvaultApp::Login(selectedProfileAccNum, toString(p))) {
         ShowDashboard(hwnd);
       } else {
-        MessageBox(hwnd, L"Invalid Account or PIN!", L"Login Failed",
+        MessageBox(hwnd, L"Invalid PIN!", L"Login Failed",
                    MB_OK | MB_ICONERROR);
       }
     }
@@ -579,7 +853,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         wstring msg = L"Account Created! Your Number: " + toWString(accNum) +
                       L"\nPlease remember it to login.";
         MessageBox(hwnd, msg.c_str(), L"Success", MB_OK | MB_ICONINFORMATION);
-        ShowLogin(hwnd);
+        ShowProfileSelection(hwnd);
       }
     }
 
@@ -637,7 +911,20 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
           break;
         }
 
+        // Capture current user account number before reload invalidates the
+        // pointer
+        string currentUserAccNum = currentUser->getAccountNumber();
+
         db.reloadAccounts();
+
+        // Restore currentUser pointer
+        currentUser = db.findAccount(currentUserAccNum);
+        if (!currentUser) {
+          MessageBox(hwnd, L"Session Error. Please login again.", L"Error",
+                     MB_OK | MB_ICONERROR);
+          ShowHome(hwnd);
+          break;
+        }
 
         Account *target = db.findAccount(targetAcc);
         if (!target) {
@@ -654,22 +941,51 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         }
 
         if (currentUser->withdraw(amount)) {
+          // Atomicity: Begin Transaction
+          if (!db.beginTransaction()) {
+            MessageBox(hwnd, L"Database Error: Could not start transaction.",
+                       L"Error", MB_OK | MB_ICONERROR);
+            // Revert local memory change since DB failed immediately
+            currentUser->deposit(amount);
+            break;
+          }
+
+          bool success = true;
+
           target->deposit(amount);
 
-          db.updateAccount(*currentUser);
-          db.updateAccount(*target);
+          if (!db.updateAccount(*currentUser))
+            success = false;
+          if (success && !db.updateAccount(*target))
+            success = false;
 
-          // Save transactions with target info
-          db.saveTransaction(
-              Transaction(db.getNextTId(), currentUser->getAccountNumber(),
-                          TransactionType::TRANSFER_OUT, amount, targetAcc));
-          db.saveTransaction(Transaction(db.getNextTId(), targetAcc,
-                                         TransactionType::TRANSFER_IN, amount,
-                                         currentUser->getAccountNumber()));
+          // Save transactions
+          if (success && !db.saveTransaction(Transaction(
+                             db.getNextTId(), currentUser->getAccountNumber(),
+                             TransactionType::TRANSFER_OUT, amount, targetAcc)))
+            success = false;
 
-          MessageBox(hwnd, L"Transfer Successful!", L"Success",
-                     MB_OK | MB_ICONINFORMATION);
-          ShowDashboard(hwnd);
+          if (success &&
+              !db.saveTransaction(Transaction(
+                  db.getNextTId(), targetAcc, TransactionType::TRANSFER_IN,
+                  amount, currentUser->getAccountNumber())))
+            success = false;
+
+          if (success) {
+            db.commitTransaction();
+            MessageBox(hwnd, L"Transfer Successful!", L"Success",
+                       MB_OK | MB_ICONINFORMATION);
+            ShowDashboard(hwnd);
+          } else {
+            db.rollbackTransaction();
+            // Revert local memory state
+            currentUser->deposit(amount);
+            target->withdraw(amount); // Revert target (though if pointer is
+                                      // fresh it might be fine, but safe to do)
+
+            MessageBox(hwnd, L"Transfer Failed! Transaction Rolled Back.",
+                       L"Error", MB_OK | MB_ICONERROR);
+          }
         } else {
           MessageBox(hwnd, L"Insufficient Funds!", L"Error",
                      MB_OK | MB_ICONERROR);
