@@ -9,8 +9,8 @@ Evault Pro is a high-fidelity, native Windows desktop application designed to si
 - **💎 Glassmorphism UI**: A futuristic design featuring semi-transparent panels, dynamic blurs, and smooth animations using GDI+.
 - **🗄️ SQLite Persistence**: Full integration with a local SQLite database for permanent storage of accounts, balances, and security credentials.
 - **🔐 Multi-Profile Security**: A secure 4-profile selection system with individual 4-digit PIN verification for every user.
-- **💰 Dynamic Banking Portal**: Real-time deposit and withdrawal operations with "Insufficient Funds" protection and balance revealing tools.
-- **📈 Stock Market Integration**: A dedicated portal for tracking market assets (expandable).
+- **💰 Dynamic Banking Portal**: Real-time deposit, withdrawal, and **Peer-to-Peer Transfer** operations. Users can transfer funds between accounts using unique account numbers.
+- **📈 Stock Market Portal**: A fully functional stock simulation system where users can buy and sell assets (APPL, TSLA, GOOG, etc.). The system tracks your portfolio quantity and updates your liquid balance in real-time.
 - **🆕 Account Generator**: Built-in registration system that automatically generates unique account numbers and validates security PINs.
 
 ## 🛠️ Technology Stack
