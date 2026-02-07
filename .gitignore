@@ -1,0 +1,22 @@
+# 🚫 Evault Pro - Git Ignore Rules
+
+# Ignore compiled executables
+*.exe
+
+# Ignore object files
+*.o
+
+# Ignore local database (good for testing, but typically ignored in production)
+evault.db
+
+# Ignore build logs and temporary error files
+*.txt
+build_log.txt
+build_errors.txt
+
+# Ignore IDE specific folders
+.vscode/
+
+# Ignore large binary files
+*.bak
+*.tmp

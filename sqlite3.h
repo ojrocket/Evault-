@@ -1,3 +1,4 @@
+/************** Begin file sqlite3.h *****************************************/
 /*
 ** 2001-09-15
 **
@@ -37,7 +38,7 @@
 /*
 ** Make sure we can call this stuff from C++.
 */
-#ifdef __cplusplus
+#if 0
 extern "C" {
 #endif
 
@@ -182,7 +183,7 @@ extern "C" {
 **
 ** See also: [sqlite_version()] and [sqlite_source_id()].
 */
-SQLITE_API SQLITE_EXTERN const char sqlite3_version[];
+SQLITE_API extern const char sqlite3_version[];
 SQLITE_API const char *sqlite3_libversion(void);
 SQLITE_API const char *sqlite3_sourceid(void);
 SQLITE_API int sqlite3_libversion_number(void);
@@ -6476,7 +6477,7 @@ SQLITE_API int sqlite3_sleep(int);
 ** sqlite3_temp_directory = sqlite3_mprintf("%s", zPathBuf);
 ** </pre></blockquote>
 */
-SQLITE_API SQLITE_EXTERN char *sqlite3_temp_directory;
+SQLITE_API extern char *sqlite3_temp_directory;
 
 /*
 ** CAPI3REF: Name Of The Folder Holding Database Files
@@ -6513,7 +6514,7 @@ SQLITE_API SQLITE_EXTERN char *sqlite3_temp_directory;
 ** made NULL or made to point to memory obtained from [sqlite3_malloc]
 ** or else the use of the [data_store_directory pragma] should be avoided.
 */
-SQLITE_API SQLITE_EXTERN char *sqlite3_data_directory;
+SQLITE_API extern char *sqlite3_data_directory;
 
 /*
 ** CAPI3REF: Win32 Specific Interface
@@ -10796,7 +10797,7 @@ SQLITE_API int sqlite3_deserialize(
 # endif
 #endif
 
-#ifdef __cplusplus
+#if 0
 }  /* End of the 'extern "C"' block */
 #endif
 #endif /* SQLITE3_H */
@@ -10819,7 +10820,7 @@ SQLITE_API int sqlite3_deserialize(
 #define _SQLITE3RTREE_H_
 
 
-#ifdef __cplusplus
+#if 0
 extern "C" {
 #endif
 
@@ -10913,7 +10914,7 @@ struct sqlite3_rtree_query_info {
 #define FULLY_WITHIN     2   /* Object fully contained within query region */
 
 
-#ifdef __cplusplus
+#if 0
 }  /* end of the 'extern "C"' block */
 #endif
 
@@ -10928,7 +10929,7 @@ struct sqlite3_rtree_query_info {
 /*
 ** Make sure we can call this stuff from C++.
 */
-#ifdef __cplusplus
+#if 0
 extern "C" {
 #endif
 
@@ -12719,7 +12720,7 @@ SQLITE_API int sqlite3session_config(int op, void *pArg);
 /*
 ** Make sure we can call this stuff from C++.
 */
-#ifdef __cplusplus
+#if 0
 }
 #endif
 
@@ -12751,7 +12752,7 @@ SQLITE_API int sqlite3session_config(int op, void *pArg);
 #define _FTS5_H
 
 
-#ifdef __cplusplus
+#if 0
 extern "C" {
 #endif
 
@@ -13346,10 +13347,12 @@ struct fts5_api {
 ** END OF REGISTRATION API
 *************************************************************************/
 
-#ifdef __cplusplus
+#if 0
 }  /* end of the 'extern "C"' block */
 #endif
 
 #endif /* _FTS5_H */
 
 /******** End of fts5.h *********/
+
+/************** End of sqlite3.h *********************************************/
