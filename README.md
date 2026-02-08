@@ -1,39 +1,93 @@
 # 🛡️ Evault Pro: Advanced Banking & Security Vault
 
-![Evault Pro Preview](https://via.placeholder.com/800x400.png?text=Evault+Pro+Interface)
+![Evault Pro Banner](https://via.placeholder.com/1200x400.png?text=Evault+Pro:+The+Future+of+Secure+Banking)
 
-Evault Pro is a high-fidelity, native Windows desktop application designed to simulate a premium banking environment with a focus on "Glassmorphism" aesthetics and secure data persistence. Built entirely in C++ using the Win32 API and GDI+, it provides a seamless and visually stunning user experience.
+**Evault Pro** is a high-fidelity, native Windows desktop application that redefines the digital vault experience. Built with a "Security-First" philosophy, it combines the power of C++ with a stunning **Glassmorphism** interface, providing a premium, high-performance environment for managing assets, trading stocks, and securing private data.
 
-## ✨ Core Features
+---
 
-- **💎 Glassmorphism UI**: A futuristic design featuring semi-transparent panels, dynamic blurs, and smooth animations using GDI+.
-- **🗄️ SQLite Persistence**: Full integration with a local SQLite database for permanent storage of accounts, balances, and security credentials.
-- **🔐 Multi-Profile Security**: A secure 4-profile selection system with individual 4-digit PIN verification for every user.
-- **💰 Dynamic Banking Portal**: Real-time deposit, withdrawal, and **Peer-to-Peer Transfer** operations. Users can transfer funds between accounts using unique account numbers.
-- **📈 Stock Market Portal**: A fully functional stock simulation system where users can buy and sell assets (APPL, TSLA, GOOG, etc.). The system tracks your portfolio quantity and updates your liquid balance in real-time.
-- **🆕 Account Generator**: Built-in registration system that automatically generates unique account numbers and validates security PINs.
+## 📸 Visual Showcase
 
-## 🛠️ Technology Stack
+Evault Pro features a state-of-the-art interface designed for clarity and elegance.
 
-- **Language**: C++11
-- **Graphics Engine**: GDI+ (Windows Graphics Device Interface)
-- **Database**: SQLite3 (Embedded)
-- **API**: Win32 API (Native Windows Development)
-- **Compiler**: MinGW-w64 (g++)
+| **Glassmorphism UI** | **P2P Banking** | **Stock Engine** |
+| :--- | :--- | :--- |
+| ![UI Preview](https://via.placeholder.com/400x250.png?text=Glass+Interface) | ![Banking Preview](https://via.placeholder.com/400x250.png?text=Secure+Transfers) | ![Stock Preview](https://via.placeholder.com/400x250.png?text=Market+Simulation) |
+| *Semi-transparent panels with dynamic blurs.* | *Real-time account validation and fund isolation.* | *Dynamic price tracking and portfolio management.* |
 
-## 🚀 Getting Started
+---
+
+## 🚀 Key Features
+
+### 💎 Elite Design System
+- **Next-Gen Aesthetics**: Multi-layered Glassmorphism panels utilizing GDI+ Alpha-blending.
+- **Micro-Animations**: Smooth view transitions and hover effects for a responsive desktop feel.
+- **Double-Buffered Rendering**: Ensures a flicker-free experience even during intensive UI updates.
+
+### 💰 Comprehensive Banking Suite
+- **Dynamic Account Management**: Instantly generate unique account numbers with secure 4-digit PINs.
+- **Peer-to-Peer (P2P) Transfers**: Securely transfer funds between profiles with real-time balance updates.
+- **Persistent Ledger**: Every transaction is recorded in an embedded SQLite database, ensuring zero data loss.
+
+### 📈 High-Fidelity Stock Market
+- **Real-Time Simulation**: Trade volatile assets including APPL, TSLA, GOOG, and high-performance cryptocurrencies like BTC and ETH.
+- **Portfolio Analytics**: Track your quantity, average purchase price, and total equity in real-time.
+- **Price History Visualization**: Conceptualized trend visualization for market monitoring.
+
+### 🔐 Advanced Security Protocols
+- **4-Profile Isolation**: Support for multiple users on a single machine, each with a private vault.
+- **PIN-Gate Verification**: Every critical operation requires biometric-style 4-digit PIN confirmation.
+- **Secure Data Persistence**: Industry-standard SQLite integration for encrypted-style local storage.
+
+---
+
+## 🛠️ Technical Deep Dive
+
+Evault Pro is engineered for performance and reliability using a native Windows stack.
+
+### Engineering Stack
+*   **Core**: C++11 (Object-Oriented Architecture)
+*   **UI Engine**: GDI+ (Windows Graphics Device Interface)
+*   **Storage**: SQLite3 (C-Compatible SQL Engine)
+*   **Graphics**: Custom Win32 Message Loop with Double Buffering
+
+### Database Schema
+The application utilizes a relational database structure designed for speed and integrity:
+```sql
+CREATE TABLE accounts (
+    acc_num TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    pin TEXT NOT NULL,
+    balance REAL DEFAULT 0
+);
+
+CREATE TABLE stocks (
+    acc_num TEXT,
+    symbol TEXT,
+    quantity INTEGER,
+    avg_price REAL,
+    FOREIGN KEY(acc_num) REFERENCES accounts(acc_num)
+);
+```
+
+### Performance Optimization
+- **Resource Management**: Proactive cleanup of GDI+ objects (Brushes, Paths, Fonts) to maintain a minimal memory footprint.
+- **Event-Driven UI**: Efficient Win32 message handling reduces CPU overhead during idle states.
+
+---
+
+## 🏗️ Getting Started
 
 ### Prerequisites
-- Windows OS (7/10/11)
-- MinGW-w64 (if compiling from source)
+- **OS**: Windows 7/10/11
+- **Compiler**: MinGW-w64 (if building from source)
 
-### Running the Application
-1. Download the repository.
-2. Navigate to the folder.
-3. Run `Evault_Pro.exe`.
+### Installation
+1.  Clone the repository.
+2.  Navigate to the project root.
+3.  Execute `Evault_Pro.exe`.
 
-### Compiling from Source
-If you wish to modify and recompile the vault:
+### Build from Source
 ```powershell
 # Compile SQLite object
 gcc -c sqlite3.c -o sqlite3.o
@@ -45,22 +99,13 @@ g++ -std=c++11 -c Evault.cpp -o Evault.o -DUNICODE -D_UNICODE
 g++ Evault.o sqlite3.o -o Evault_Pro.exe -mwindows -lgdiplus -lgdi32 -lcomctl32 -lole32 -luuid -static
 ```
 
-## 🔑 Default Accounts
-| Account Holder | Account Number | Default PIN |
-| :--- | :--- | :--- |
-| **jashwanth oggu** | 77367438 | 1985 |
-| **chinni jaswanth** | 48528372 | 4066 |
-| **muni charan teja** | 57422441 | 1028 |
-| **jane SQLite** | 84536252 | 4321 |
+---
+
+## 🗺️ Roadmap
+- [ ] **Transaction History**: Comprehensive log of all deposit/withdrawal/transfer events.
+- [ ] **Advanced Charts**: Interactive candlestick charts for the Stock Market portal.
+- [ ] **Dark/Light Mode**: Dynamic theme switching for personalized aesthetics.
+- [ ] **Data Export**: Export your banking report as a PDF or CSV.
 
 ---
-*Created with ❤️ for Advanced Banking Simulations.*
-
-## 💡 Expert Notes & Best Practices
-
-To maintain a professional-grade repository, this project follows industry-standard "Clean Repository" practices:
-
-- **Git Ignore Implementation**: A `.gitignore` file is included to ensure that large binary files (`.exe`), temporary object files (`.o`), and local databases (`.db`) are not tracked. This keeps the repository lightweight and prevents merge conflicts.
-- **Log Management**: Build logs and error reports are excluded from the main branch. In a production environment, debugging information is generated locally and should never be part of the codebase.
-- **SQLite Isolation**: The `evault.db` is handled as a local asset. While the code initializes it automatically, the data itself is private and unique to the local machine, ensuring no sensitive test data is leaked to public platforms.
-- **GDI+ Resource Handling**: The application uses proactive memory management for GDI+ brushes and paths to ensure zero memory leaks during prolonged vault sessions.
+*Developed with a commitment to Visual Excellence and Software Integrity.*
